@@ -19,10 +19,10 @@ feature samples, not the original training dataset.
 
 ## Create the Render deployment
 
-1. Push the project to a GitHub repository, including `render.yaml` and the
-   `render-model/` files.
-2. In Render, create a **Blueprint** from that repository and deploy the
-   resources in `render.yaml`.
+1. Push the project to a GitHub repository, including the root-level
+   `render.yaml` and the `fraud-detection-pipeline/render-model/` files.
+2. In Render, create a **Blueprint** from that repository and select
+   `render.yaml` at the repository root.
 3. Enter a strong unique value for `GF_SECURITY_ADMIN_PASSWORD` when prompted.
 4. Wait for Kafka, PostgreSQL, the producer, Spark, and Grafana to finish
    deploying. The producer and Spark wait for their TCP dependencies at startup;

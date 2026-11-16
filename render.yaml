@@ -4,8 +4,8 @@ services:
     runtime: docker
     region: singapore
     plan: standard
-    dockerfilePath: ./kafka/Dockerfile
-    dockerContext: .
+    dockerfilePath: ./fraud-detection-pipeline/kafka/Dockerfile
+    dockerContext: ./fraud-detection-pipeline
     disk:
       name: kafka-data
       mountPath: /var/lib/kafka/data
@@ -45,8 +45,8 @@ services:
     runtime: docker
     region: singapore
     plan: starter
-    dockerfilePath: ./producer/Dockerfile
-    dockerContext: .
+    dockerfilePath: ./fraud-detection-pipeline/producer/Dockerfile
+    dockerContext: ./fraud-detection-pipeline
     envVars:
       - key: KAFKA_BOOTSTRAP_SERVERS
         value: kafka:9092
@@ -64,8 +64,8 @@ services:
     runtime: docker
     region: singapore
     plan: standard
-    dockerfilePath: ./spark/Dockerfile
-    dockerContext: .
+    dockerfilePath: ./fraud-detection-pipeline/spark/Dockerfile
+    dockerContext: ./fraud-detection-pipeline
     startCommand: >-
       /opt/spark/bin/spark-submit --master 'local[2]' --driver-memory 1g
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5,org.postgresql:postgresql:42.7.5
@@ -113,8 +113,8 @@ services:
     runtime: docker
     region: singapore
     plan: starter
-    dockerfilePath: ./grafana/Dockerfile
-    dockerContext: .
+    dockerfilePath: ./fraud-detection-pipeline/grafana/Dockerfile
+    dockerContext: ./fraud-detection-pipeline
     healthCheckPath: /api/health
     envVars:
       - key: PORT
