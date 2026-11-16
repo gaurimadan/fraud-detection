@@ -1,0 +1,39 @@
+{
+  "model_version": "paysim-gradient-boosting-v3",
+  "feature_columns": [
+    "type",
+    "destination_is_merchant",
+    "step",
+    "amount",
+    "oldbalanceOrg",
+    "newbalanceOrig",
+    "oldbalanceDest",
+    "newbalanceDest",
+    "isFlaggedFraud"
+  ],
+  "fraud_prior": 0.0013020690125755939,
+  "threshold": 0.007000854597140934,
+  "threshold_selection_split": "validation",
+  "metrics": {
+    "test_average_precision": 0.9895772540941469,
+    "test_roc_auc": 0.9999263917919554,
+    "test_precision": 1.0,
+    "test_recall": 0.9755700325732899,
+    "test_f1": 0.9876339653751031
+  },
+  "population_counts": {
+    "train": {
+      "0": 4449416,
+      "1": 5801
+    },
+    "validation": {
+      "0": 952252,
+      "1": 1184
+    },
+    "test": {
+      "0": 952739,
+      "1": 1228
+    }
+  },
+  "training_rows_per_class": 5801
+}

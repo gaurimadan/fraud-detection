@@ -1,0 +1,156 @@
+services:
+  - type: pserv
+    name: kafka
+    runtime: docker
+    region: singapore
+    plan: standard
+    dockerfilePath: ./kafka/Dockerfile
+    dockerContext: .
+    disk:
+      name: kafka-data
+      mountPath: /var/lib/kafka/data
+      sizeGB: 10
+    envVars:
+      - key: KAFKA_NODE_ID
+        value: "1"
+      - key: KAFKA_PROCESS_ROLES
+        value: broker,controller
+      - key: KAFKA_LISTENERS
+        value: INTERNAL://:9092,CONTROLLER://:9093
+      - key: KAFKA_ADVERTISED_LISTENERS
+        value: INTERNAL://kafka:9092
+      - key: KAFKA_CONTROLLER_LISTENER_NAMES
+        value: CONTROLLER
+      - key: KAFKA_CONTROLLER_QUORUM_VOTERS
+        value: 1@kafka:9093
+      - key: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+        value: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      - key: KAFKA_INTER_BROKER_LISTENER_NAME
+        value: INTERNAL
+      - key: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+        value: "1"
+      - key: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+        value: "1"
+      - key: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+        value: "1"
+      - key: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+        value: "true"
+      - key: KAFKA_LOG_DIRS
+        value: /var/lib/kafka/data
+      - key: KAFKA_HEAP_OPTS
+        value: -Xms256m -Xmx512m
+
+  - type: worker
+    name: fraud-producer
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./producer/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        value: kafka:9092
+      - key: KAFKA_TOPIC
+        value: transactions
+      - key: PRODUCER_INTERVAL_SECONDS
+        value: "1"
+      - key: DEMO_SAMPLE_DIR
+        value: /models
+      - key: DEMO_FRAUD_RATE
+        value: "0.05"
+
+  - type: worker
+    name: fraud-spark
+    runtime: docker
+    region: singapore
+    plan: standard
+    dockerfilePath: ./spark/Dockerfile
+    dockerContext: .
+    startCommand: >-
+      /opt/spark/bin/spark-submit --master 'local[2]' --driver-memory 1g
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5,org.postgresql:postgresql:42.7.5
+      /app/streaming.py
+    disk:
+      name: spark-checkpoints
+      mountPath: /tmp/spark-checkpoints
+      sizeGB: 1
+    envVars:
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        value: kafka:9092
+      - key: KAFKA_TOPIC
+        value: transactions
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: fraud-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: fraud-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: fraud-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: fraud-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: fraud-db
+          property: password
+      - key: POSTGRES_SSLMODE
+        value: require
+      - key: CHECKPOINT_DIR
+        value: /tmp/spark-checkpoints
+      - key: MODEL_PATH
+        value: /models/fraud-model.joblib
+      - key: FRAUD_PROBABILITY_THRESHOLD
+        value: ""
+
+  - type: web
+    name: fraud-grafana
+    runtime: docker
+    region: singapore
+    plan: starter
+    dockerfilePath: ./grafana/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: GF_SERVER_HTTP_PORT
+        value: "10000"
+      - key: GF_SECURITY_ADMIN_USER
+        value: admin
+      - key: GF_SECURITY_ADMIN_PASSWORD
+        sync: false
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: fraud-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: fraud-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: fraud-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: fraud-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: fraud-db
+          property: password
+      - key: POSTGRES_SSLMODE
+        value: require
+
+databases:
+  - name: fraud-db
+    databaseName: fraud
+    user: fraud
+    plan: basic-256mb
+    region: singapore

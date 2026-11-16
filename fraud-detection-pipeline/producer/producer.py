@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import socket
 import time
 import uuid
 from datetime import datetime, timezone
@@ -85,8 +86,24 @@ def generated_cycle(
     return batch
 
 
+def wait_for_kafka(timeout: int = 300) -> None:
+    host, port = BOOTSTRAP_SERVERS.split(",", maxsplit=1)[0].rsplit(":", 1)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with socket.create_connection((host, int(port)), timeout=3):
+                return
+        except OSError as error:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Timed out waiting for Kafka at {host}:{port}"
+                ) from error
+            time.sleep(2)
+
+
 def main() -> None:
     samples = load_demo_samples()
+    wait_for_kafka()
     producer = KafkaProducer(
         bootstrap_servers=BOOTSTRAP_SERVERS.split(","),
         value_serializer=lambda value: json.dumps(value).encode("utf-8"),

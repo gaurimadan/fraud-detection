@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
+import time
+from pathlib import Path
 from typing import Iterable
 
 import joblib
@@ -28,6 +31,7 @@ POSTGRES_CONFIG = {
     "dbname": os.getenv("POSTGRES_DB", "fraud"),
     "user": os.getenv("POSTGRES_USER", "fraud"),
     "password": os.getenv("POSTGRES_PASSWORD", "local-dev-only"),
+    "sslmode": os.getenv("POSTGRES_SSLMODE", "prefer"),
 }
 
 TRANSACTION_SCHEMA = T.StructType(
@@ -73,11 +77,26 @@ def postgres_connection():
     return psycopg2.connect(**POSTGRES_CONFIG)
 
 
+def wait_for_tcp(host: str, port: int, service: str, timeout: int = 300) -> None:
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with socket.create_connection((host, port), timeout=3):
+                return
+        except OSError as error:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Timed out waiting for {service} at {host}:{port}"
+                ) from error
+            time.sleep(2)
+
+
 def ensure_database_schema() -> None:
     connection = postgres_connection()
     try:
         with connection:
             with connection.cursor() as cursor:
+                cursor.execute(Path(__file__).with_name("init.sql").read_text())
                 cursor.execute(MIGRATE_TRANSACTIONS_SQL)
     finally:
         connection.close()
@@ -294,6 +313,14 @@ def main() -> None:
     )
     if not 0 <= prediction_threshold <= 1:
         raise ValueError("FRAUD_PROBABILITY_THRESHOLD must be between 0 and 1")
+
+    wait_for_tcp(
+        POSTGRES_CONFIG["host"],
+        POSTGRES_CONFIG["port"],
+        "PostgreSQL",
+    )
+    kafka_host, kafka_port = BOOTSTRAP_SERVERS.split(",", maxsplit=1)[0].rsplit(":", 1)
+    wait_for_tcp(kafka_host, int(kafka_port), "Kafka")
 
     spark = (
         SparkSession.builder.appName("real-time-fraud-detection")

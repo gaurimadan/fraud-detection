@@ -117,6 +117,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
       POSTGRES_USER: ${POSTGRES_USER:-fraud}
       POSTGRES_DB: ${POSTGRES_DB:-fraud}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_SSLMODE: disable
     ports:
       - "3000:3000"
     volumes:
