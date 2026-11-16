@@ -1,59 +1,72 @@
 # Real-Time Fraud Detection Pipeline
 
-A local demonstration pipeline that generates transaction events, publishes
-them to Kafka, processes them with Spark Structured Streaming, persists
-transactions and fraud alerts in PostgreSQL, and visualizes the results in
-Grafana.
+A local demonstration pipeline that trains a gradient-boosting fraud classifier
+on the PaySim dataset, generates PaySim-shaped transaction events, scores them
+with Spark Structured Streaming, persists predictions in PostgreSQL, and
+visualizes the results in Grafana.
 
 ## Architecture
 
 ```text
-Python generator -> Kafka topic `transactions` -> Spark Structured Streaming
-                                                  |-> PostgreSQL `transactions`
-                                                  `-> PostgreSQL `fraud_alerts`
-                                                            |
-                                                        Grafana
+PaySim Fraud.csv
+      |
+      v
+model-trainer -> persisted GradientBoosting + preprocessing pipeline
+                                      |
+Python producer -> Kafka topic -> Spark loads model and scores events
+                                      |-> PostgreSQL transactions + predictions
+                                      `-> Grafana dashboard
 ```
 
-The generator sends ordinary traffic plus intentionally suspicious examples.
-Spark records every valid transaction and sets `is_high_amount` when the amount
-is at least USD 5,000. It also emits event-time window alerts for:
+The model follows the notebook's `GradientBoostingClassifier` approach. Its
+features are transaction type, step, amount, origin/destination balances, and
+the dataset's existing `isFlaggedFraud` signal, plus whether the destination
+is a merchant (derived from its `M`/`C` prefix). Account IDs themselves are left
+out because label-encoding them does not generalize to unseen accounts. The
+trainer splits the data before class balancing, uses a bounded balanced sample,
+does not scale features for a tree model, corrects the balanced model scores for
+PaySim's fraud prevalence, and selects a probability threshold on a held-out
+validation sample. It reports prevalence-weighted metrics on a separate test
+split. The threshold and test metrics are saved with the model.
 
-- **Transaction velocity:** at least four transactions for one customer in a
-  five-minute sliding window (window advances every minute).
-- **Multiple locations:** transactions for one customer from more than one
-  location in the same window.
-
-The streaming aggregations use a one-minute event-time watermark by default.
-Window alerts are therefore finalized after the watermark advances, rather
-than immediately when the first matching event arrives. PostgreSQL writes use
-stable transaction and alert IDs with `ON CONFLICT` upserts so microbatch
-retries do not duplicate records.
+The producer samples feature rows from the held-out PaySim test set,
+refreshes transaction IDs and timestamps, and never publishes their labels.
+`DEMO_FRAUD_RATE` is the chance per producer batch of selecting one
+fraud-shaped validation example (default `0.05`, roughly 0.6% of generated
+events). This is intentional demo oversampling, not a representation of real
+fraud prevalence.
+Spark writes the model's probability and decision for each event. Predictions
+above the saved threshold become `fraud_alerts` records immediately, rather
+than waiting for event-time windows.
 
 ## Run locally
 
-Requirements: Docker Engine and the Docker Compose plugin.
+Requirements: Docker Engine, Docker Compose v2, and the PaySim `Fraud.csv`
+training file. The dataset is not committed to this project. Download
+`Fraud.csv` from the [Kaggle dataset page](https://www.kaggle.com/datasets/vardhansiramdasu/fraudulent-transactions-prediction)
+and place it at `data/Fraud.csv`. The dataset is about 471 MB extracted.
 
 ```bash
 cd "/home/gauri/fraud detection/fraud-detection-pipeline"
-cp .env.example .env
+mkdir -p data
+# Download Fraud.csv from Kaggle and save it as data/Fraud.csv.
+cp -n .env.example .env
 docker compose up --build
 ```
 
-The first Spark startup downloads the Spark Kafka connector and PostgreSQL JDBC
-driver, so it needs internet access. The first run also builds the producer and
-Spark images and may take several minutes. Check service health and logs:
+The first run builds the images, trains and saves the model, and downloads the
+Spark Kafka connector and PostgreSQL JDBC driver. Keep internet access enabled
+and allow several minutes for startup. The CSV is mounted read-only and
+excluded from Docker build contexts. Check service health and logs:
 
 ```bash
 docker compose ps
 docker compose logs -f producer spark
 ```
 
-The producer continuously sends normal and intentionally suspicious sample
-transactions. Spark consumes them from the beginning of the Kafka topic and
-stores transactions and windowed alerts in PostgreSQL. Alerts are finalized
-after the one-minute watermark advances, so allow a couple of minutes for
-windowed alerts to appear.
+The producer continuously sends sample transactions. Spark consumes them from
+the beginning of the Kafka topic, stores every scored transaction, and writes
+model predictions above the selected threshold to PostgreSQL.
 
 Open the provisioned dashboard at [http://localhost:3000](http://localhost:3000)
 (Grafana's default local login is `admin` / `admin`; Grafana prompts to change
@@ -64,35 +77,44 @@ You can inspect stored data directly from another terminal:
 
 ```bash
 docker compose exec -T postgres psql -U fraud -d fraud -c \
-  "SELECT COUNT(*) AS transactions, COUNT(*) FILTER (WHERE is_high_amount) AS high_value FROM transactions;"
+  "SELECT COUNT(*) AS transactions, COUNT(*) FILTER (WHERE is_fraud_predicted) AS model_predictions FROM transactions;"
 docker compose exec -T postgres psql -U fraud -d fraud -c \
-  "SELECT alert_type, customer_id, window_start, metric_value FROM fraud_alerts ORDER BY window_start DESC LIMIT 10;"
+  "SELECT customer_id, details->>'fraud_probability' AS probability, details->>'prediction_threshold' AS threshold, window_start FROM fraud_alerts WHERE alert_type = 'ml_fraud_prediction' ORDER BY window_start DESC LIMIT 10;"
 ```
 
 Stop the stack with `docker compose down`. To also remove persisted PostgreSQL
-data and Spark checkpoints, run `docker compose down -v`.
+data, model, and Spark checkpoints, run `docker compose down -v`. Existing
+database rows are preserved during the schema migration; the dashboard filters
+for new ML prediction records.
 
-## Configure thresholds
+## Model training and retraining
 
-Copy `.env.example` to `.env` and adjust the values:
+`MODEL_MAX_ROWS_PER_CLASS` limits the per-class training and validation samples
+(default `20000`). `DEMO_FRAUD_RATE` changes only the demo event selection; it
+does not affect training or model scoring. Training is class-balanced only after the train/validation
+split; saved probabilities are adjusted to the original fraud prevalence. The
+threshold is selected to maximize prevalence-weighted validation F1; final
+reported metrics use a separate untouched test split. To override
+the saved threshold, set `FRAUD_PROBABILITY_THRESHOLD` in `.env` to a number
+between `0` and `1`.
 
-- `HIGH_AMOUNT_THRESHOLD`: per-transaction amount threshold, default `5000`.
-- `VELOCITY_COUNT_THRESHOLD`: minimum window transaction count, default `4`.
-- `FRAUD_WINDOW`: event-time window size, default `5 minutes`.
-- `FRAUD_WINDOW_SLIDE`: how often windows advance, default `1 minute`.
-- `WATERMARK_DELAY`: allowed lateness, default `1 minute`.
+To deliberately retrain with the current CSV and replace the saved model:
 
-These settings are for demonstration. The sample event generator includes
-USD 7,500 examples; `producer/rules.py` documents the default USD 5,000 rule.
-The stream applies the configurable threshold from `.env`.
+```bash
+docker compose run --rm -e FORCE_RETRAIN=1 model-trainer
+docker compose restart producer spark
+```
 
 ## Tests
 
-The focused unit tests cover the high-amount rule:
+The focused unit tests cover the model's training-sample logic and probability
+correction, plus the producer's model-input format. Run them while the stack is
+up:
 
 ```bash
 cd "/home/gauri/fraud detection/fraud-detection-pipeline"
-python -m unittest discover -s tests -v
+docker compose run --rm model-trainer python3 -m unittest discover -s /app/tests -p 'test_model_training.py' -v
+docker compose exec producer python -m unittest discover -s /app/tests -p 'test_producer.py' -v
 ```
 
 ## Notes before production use
@@ -105,6 +127,6 @@ python -m unittest discover -s tests -v
   and establish an audited case-review process before real decisions are made.
 - Kafka runs as a single local broker with plaintext transport; PostgreSQL and
   Spark are configured for local development rather than high availability.
-- Spark filters malformed records before persistence and logs their counts.
+- Spark filters malformed records before scoring and logs their counts.
   Add a dead-letter topic and operational metrics before relying on untrusted
   production input.

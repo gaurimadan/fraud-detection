@@ -6,7 +6,19 @@ CREATE TABLE IF NOT EXISTS transactions (
     location TEXT NOT NULL,
     merchant TEXT NOT NULL,
     event_time TIMESTAMPTZ NOT NULL,
-    is_high_amount BOOLEAN NOT NULL DEFAULT FALSE,
+    step INTEGER NOT NULL DEFAULT 0,
+    transaction_type TEXT NOT NULL DEFAULT 'PAYMENT',
+    name_orig TEXT NOT NULL DEFAULT '',
+    name_dest TEXT NOT NULL DEFAULT '',
+    oldbalance_org DOUBLE PRECISION NOT NULL DEFAULT 0,
+    newbalance_orig DOUBLE PRECISION NOT NULL DEFAULT 0,
+    oldbalance_dest DOUBLE PRECISION NOT NULL DEFAULT 0,
+    newbalance_dest DOUBLE PRECISION NOT NULL DEFAULT 0,
+    is_flagged_fraud BOOLEAN NOT NULL DEFAULT FALSE,
+    fraud_probability DOUBLE PRECISION NOT NULL DEFAULT 0,
+    is_fraud_predicted BOOLEAN NOT NULL DEFAULT FALSE,
+    prediction_threshold DOUBLE PRECISION NOT NULL DEFAULT 0,
+    model_version TEXT NOT NULL DEFAULT 'unknown',
     ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -14,9 +26,6 @@ CREATE INDEX IF NOT EXISTS idx_transactions_event_time
     ON transactions (event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_customer_time
     ON transactions (customer_id, event_time DESC);
-CREATE INDEX IF NOT EXISTS idx_transactions_high_amount
-    ON transactions (event_time DESC) WHERE is_high_amount;
-
 CREATE TABLE IF NOT EXISTS fraud_alerts (
     alert_id TEXT PRIMARY KEY,
     alert_type TEXT NOT NULL,

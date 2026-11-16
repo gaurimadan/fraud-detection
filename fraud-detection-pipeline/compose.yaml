@@ -48,10 +48,34 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: transactions
       PRODUCER_INTERVAL_SECONDS: 1
+      DEMO_SAMPLE_DIR: /models
+      DEMO_FRAUD_RATE: ${DEMO_FRAUD_RATE:-0.05}
     depends_on:
       kafka:
         condition: service_healthy
+      model-trainer:
+        condition: service_completed_successfully
+    volumes:
+      - model-artifacts:/models:ro
     restart: unless-stopped
+
+  model-trainer:
+    build:
+      context: .
+      dockerfile: model/Dockerfile
+    command:
+      - python3
+      - /app/train_model.py
+      - --input
+      - /data/Fraud.csv
+      - --output
+      - /models/fraud-model.joblib
+    environment:
+      MODEL_MAX_ROWS_PER_CLASS: ${MODEL_MAX_ROWS_PER_CLASS:-20000}
+    volumes:
+      - ./data:/data:ro
+      - model-artifacts:/models
+    restart: "no"
 
   spark:
     build:
@@ -73,18 +97,18 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-fraud}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
       CHECKPOINT_DIR: /tmp/spark-checkpoints
-      HIGH_AMOUNT_THRESHOLD: ${HIGH_AMOUNT_THRESHOLD:-5000}
-      VELOCITY_COUNT_THRESHOLD: ${VELOCITY_COUNT_THRESHOLD:-4}
-      FRAUD_WINDOW: ${FRAUD_WINDOW:-5 minutes}
-      FRAUD_WINDOW_SLIDE: ${FRAUD_WINDOW_SLIDE:-1 minute}
-      WATERMARK_DELAY: ${WATERMARK_DELAY:-1 minute}
+      MODEL_PATH: /models/fraud-model.joblib
+      FRAUD_PROBABILITY_THRESHOLD: ${FRAUD_PROBABILITY_THRESHOLD:-}
     depends_on:
       kafka:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      model-trainer:
+        condition: service_completed_successfully
     volumes:
       - spark-checkpoints:/tmp/spark-checkpoints
+      - model-artifacts:/models:ro
     restart: unless-stopped
 
   grafana:
@@ -106,3 +130,4 @@ services:
 volumes:
   postgres-data:
   spark-checkpoints:
+  model-artifacts:

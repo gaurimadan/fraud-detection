@@ -30,7 +30,7 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__timeGroup(event_time, '1m') AS time, COUNT(*) AS transactions FROM transactions WHERE $__timeFilter(event_time) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT $__timeGroup(event_time, '1m') AS time, COUNT(*) AS transactions FROM transactions WHERE model_version = 'paysim-gradient-boosting-v3' AND $__timeFilter(event_time) GROUP BY 1 ORDER BY 1",
           "editorMode": "code"
         }
       ],
@@ -55,7 +55,7 @@
     },
     {
       "id": 2,
-      "title": "High-value transactions",
+      "title": "ML fraud risk",
       "type": "timeseries",
       "datasource": {
         "type": "postgres",
@@ -71,13 +71,13 @@
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT event_time AS time, amount FROM transactions WHERE is_high_amount AND $__timeFilter(event_time) ORDER BY event_time",
+          "rawSql": "SELECT event_time AS time, fraud_probability * 100 AS risk_percent FROM transactions WHERE model_version = 'paysim-gradient-boosting-v3' AND is_fraud_predicted AND $__timeFilter(event_time) ORDER BY event_time",
           "editorMode": "code"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "currencyUSD",
+          "unit": "percent",
           "color": {
             "mode": "palette-classic"
           }
@@ -96,8 +96,8 @@
     },
     {
       "id": 3,
-      "title": "Fraud alerts by type",
-      "type": "barchart",
+      "title": "ML fraud predictions per hour",
+      "type": "timeseries",
       "datasource": {
         "type": "postgres",
         "uid": "fraud-postgres"
@@ -111,8 +111,8 @@
       "targets": [
         {
           "refId": "A",
-          "format": "table",
-          "rawSql": "SELECT alert_type, COUNT(*) AS alerts FROM fraud_alerts WHERE $__timeFilter(window_start) GROUP BY alert_type ORDER BY alerts DESC",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(window_start, '1h') AS time, COUNT(*) AS predictions FROM fraud_alerts WHERE alert_type = 'ml_fraud_prediction' AND details->>'model_version' = 'paysim-gradient-boosting-v3' AND $__timeFilter(window_start) GROUP BY 1 ORDER BY 1",
           "editorMode": "code"
         }
       ],
@@ -125,9 +125,9 @@
         "overrides": []
       },
       "options": {
-        "orientation": "horizontal",
         "legend": {
-          "showLegend": false
+          "displayMode": "list",
+          "placement": "bottom"
         },
         "tooltip": {
           "mode": "single"
@@ -136,7 +136,7 @@
     },
     {
       "id": 4,
-      "title": "Recent fraud alerts",
+      "title": "Recent ML fraud predictions",
       "type": "table",
       "datasource": {
         "type": "postgres",
@@ -152,7 +152,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT window_start AS time, alert_type, customer_id, metric_value, details::text AS details FROM fraud_alerts WHERE $__timeFilter(window_start) ORDER BY window_start DESC LIMIT 100",
+          "rawSql": "SELECT window_start AS time, customer_id, details->>'fraud_probability' AS fraud_probability, details->>'prediction_threshold' AS prediction_threshold, details->>'model_version' AS model_version FROM fraud_alerts WHERE alert_type = 'ml_fraud_prediction' AND details->>'model_version' = 'paysim-gradient-boosting-v3' AND $__timeFilter(window_start) ORDER BY window_start DESC LIMIT 100",
           "editorMode": "code"
         }
       ],
