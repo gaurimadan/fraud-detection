@@ -11,3 +11,5 @@ COPY spark/streaming.py /app/streaming.py
 COPY postgres/init.sql /app/init.sql
 COPY render-model/ /models/
 USER 185
+
+CMD ["/opt/spark/bin/spark-submit", "--master", "local[2]", "--driver-memory", "1g", "--packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5,org.postgresql:postgresql:42.7.5", "/app/streaming.py"]

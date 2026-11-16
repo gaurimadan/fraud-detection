@@ -26,7 +26,8 @@ feature samples, not the original training dataset.
 3. Enter a strong unique value for `GF_SECURITY_ADMIN_PASSWORD` when prompted.
 4. Wait for Kafka, PostgreSQL, the producer, Spark, and Grafana to finish
    deploying. The producer and Spark wait for their TCP dependencies at startup;
-   Spark creates the database tables when it connects.
+   Spark's Docker image supplies its `spark-submit` command and creates the
+   database tables when it connects.
 5. Open the public `fraud-grafana` service URL. Sign in as `admin` with the
    password entered during Blueprint creation.
 

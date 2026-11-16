@@ -66,10 +66,6 @@ services:
     plan: standard
     dockerfilePath: ./fraud-detection-pipeline/spark/Dockerfile
     dockerContext: ./fraud-detection-pipeline
-    startCommand: >-
-      /opt/spark/bin/spark-submit --master 'local[2]' --driver-memory 1g
-      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5,org.postgresql:postgresql:42.7.5
-      /app/streaming.py
     disk:
       name: spark-checkpoints
       mountPath: /tmp/spark-checkpoints
