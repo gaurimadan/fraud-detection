@@ -20,7 +20,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS") or (
+    f"{os.getenv('KAFKA_BOOTSTRAP_HOST', 'localhost')}:"
+    f"{os.getenv('KAFKA_BOOTSTRAP_PORT', '9092')}"
+)
 TOPIC = os.getenv("KAFKA_TOPIC", "transactions")
 INTERVAL_SECONDS = float(os.getenv("PRODUCER_INTERVAL_SECONDS", "1"))
 DEMO_SAMPLE_DIR = Path(os.getenv("DEMO_SAMPLE_DIR", "/models"))

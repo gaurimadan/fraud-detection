@@ -36,6 +36,10 @@ public only if you are comfortable with the dashboard being accessible to
 anyone who has the link; use a strong password and do not expose PostgreSQL
 or Kafka publicly.
 
+The Kafka service advertises its Render private hostname dynamically. The
+producer and Spark get that hostname from the Blueprint service reference;
+Kafka uses `localhost` for its single-node KRaft controller connection.
+
 This is a multi-service, always-on deployment with persistent Kafka and Spark
 disks plus a managed PostgreSQL database. Render charges for the selected
 resources; this stack is not suitable for a free-only deployment. The model is
