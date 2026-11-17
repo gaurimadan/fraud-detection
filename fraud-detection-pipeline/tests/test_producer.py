@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, "/app")
-from producer import generated_cycle, make_transaction
+from producer import generated_cycle, kafka_bootstrap_servers, make_transaction
 
 
 NORMAL_FEATURES = {
@@ -30,6 +30,17 @@ FRAUD_FEATURES = {
 
 
 class ProducerTests(unittest.TestCase):
+    def test_render_kafka_host_overrides_legacy_bootstrap_value(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "KAFKA_BOOTSTRAP_HOST": "kafka-private-host",
+                "KAFKA_BOOTSTRAP_PORT": "9092",
+                "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+            },
+        ):
+            self.assertEqual(kafka_bootstrap_servers(), "kafka-private-host:9092")
+
     def test_transaction_contains_model_features_but_no_training_label(self):
         transaction = make_transaction(NORMAL_FEATURES)
 

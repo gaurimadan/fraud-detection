@@ -39,6 +39,9 @@ or Kafka publicly.
 The Kafka service advertises its Render private hostname dynamically. The
 producer and Spark get that hostname from the Blueprint service reference;
 Kafka uses `localhost` for its single-node KRaft controller connection.
+If an older deployment has a manually configured `KAFKA_BOOTSTRAP_SERVERS`
+value, the updated producer and Spark prefer the Blueprint's
+`KAFKA_BOOTSTRAP_HOST` and `KAFKA_BOOTSTRAP_PORT` values instead.
 
 This is a multi-service, always-on deployment with persistent Kafka and Spark
 disks plus a managed PostgreSQL database. Render charges for the selected

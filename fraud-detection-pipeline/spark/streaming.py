@@ -21,10 +21,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS") or (
-    f"{os.getenv('KAFKA_BOOTSTRAP_HOST', 'kafka')}:"
-    f"{os.getenv('KAFKA_BOOTSTRAP_PORT', '9092')}"
-)
+def kafka_bootstrap_servers() -> str:
+    host = os.getenv("KAFKA_BOOTSTRAP_HOST")
+    if host:
+        return f"{host}:{os.getenv('KAFKA_BOOTSTRAP_PORT', '9092')}"
+    return os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+
+
+BOOTSTRAP_SERVERS = kafka_bootstrap_servers()
 TOPIC = os.getenv("KAFKA_TOPIC", "transactions")
 CHECKPOINT_DIR = os.getenv("CHECKPOINT_DIR", "/tmp/spark-checkpoints")
 MODEL_PATH = os.getenv("MODEL_PATH", "/models/fraud-model.joblib")
