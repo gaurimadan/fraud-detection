@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from kafka import KafkaProducer
-from kafka.errors import KafkaError
+from kafka.errors import KafkaError, NoBrokersAvailable
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -32,6 +32,7 @@ TOPIC = os.getenv("KAFKA_TOPIC", "transactions")
 INTERVAL_SECONDS = float(os.getenv("PRODUCER_INTERVAL_SECONDS", "1"))
 DEMO_SAMPLE_DIR = Path(os.getenv("DEMO_SAMPLE_DIR", "/models"))
 DEMO_FRAUD_RATE = float(os.getenv("DEMO_FRAUD_RATE", "0.05"))
+KAFKA_STARTUP_TIMEOUT_SECONDS = int(os.getenv("KAFKA_STARTUP_TIMEOUT_SECONDS", "300"))
 LOCATIONS = ["New York", "London", "Singapore", "Toronto", "Berlin"]
 MERCHANTS = ["grocery", "electronics", "travel", "restaurant", "fuel"]
 def load_demo_samples() -> dict[str, list[dict[str, str]]]:
@@ -108,17 +109,32 @@ def wait_for_kafka(timeout: int = 300) -> None:
             time.sleep(2)
 
 
+def create_kafka_producer() -> KafkaProducer:
+    deadline = time.monotonic() + KAFKA_STARTUP_TIMEOUT_SECONDS
+    while True:
+        try:
+            return KafkaProducer(
+                bootstrap_servers=BOOTSTRAP_SERVERS.split(","),
+                value_serializer=lambda value: json.dumps(value).encode("utf-8"),
+                key_serializer=lambda value: value.encode("utf-8"),
+                acks="all",
+                retries=10,
+                max_in_flight_requests_per_connection=1,
+            )
+        except NoBrokersAvailable:
+            if time.monotonic() >= deadline:
+                raise
+            logger.warning(
+                "Kafka at %s is not ready yet; retrying producer connection",
+                BOOTSTRAP_SERVERS,
+            )
+            time.sleep(5)
+
+
 def main() -> None:
     samples = load_demo_samples()
     wait_for_kafka()
-    producer = KafkaProducer(
-        bootstrap_servers=BOOTSTRAP_SERVERS.split(","),
-        value_serializer=lambda value: json.dumps(value).encode("utf-8"),
-        key_serializer=lambda value: value.encode("utf-8"),
-        acks="all",
-        retries=10,
-        max_in_flight_requests_per_connection=1,
-    )
+    producer = create_kafka_producer()
     logger.info("Publishing transaction events to %s at %s", TOPIC, BOOTSTRAP_SERVERS)
     try:
         while True:

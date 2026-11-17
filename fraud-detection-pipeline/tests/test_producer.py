@@ -4,8 +4,15 @@ import sys
 import unittest
 from unittest.mock import patch
 
+from kafka.errors import NoBrokersAvailable
+
 sys.path.insert(0, "/app")
-from producer import generated_cycle, kafka_bootstrap_servers, make_transaction
+from producer import (
+    create_kafka_producer,
+    generated_cycle,
+    kafka_bootstrap_servers,
+    make_transaction,
+)
 
 
 NORMAL_FEATURES = {
@@ -30,6 +37,20 @@ FRAUD_FEATURES = {
 
 
 class ProducerTests(unittest.TestCase):
+    def test_producer_retries_when_kafka_is_not_ready(self):
+        producer_instance = object()
+        with (
+            patch(
+                "producer.KafkaProducer",
+                side_effect=[NoBrokersAvailable(), producer_instance],
+            ),
+            patch("producer.time.sleep") as sleep,
+            patch("producer.time.monotonic", side_effect=[0, 1]),
+        ):
+            self.assertIs(create_kafka_producer(), producer_instance)
+
+        sleep.assert_called_once_with(5)
+
     def test_render_kafka_host_overrides_legacy_bootstrap_value(self):
         with patch.dict(
             "os.environ",
