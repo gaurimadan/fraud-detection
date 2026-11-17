@@ -29,7 +29,8 @@ feature samples, not the original training dataset.
    Spark's Docker image supplies its `spark-submit` command and creates the
    database tables when it connects.
 5. Open the public `fraud-grafana` service URL. Sign in as `admin` with the
-   password entered during Blueprint creation.
+   password entered during Blueprint creation. Grafana is configured to open
+   the provisioned Real-Time Fraud Detection dashboard as its home page.
 
 The public Grafana `onrender.com` URL is the shareable project link. Keep it
 public only if you are comfortable with the dashboard being accessible to
